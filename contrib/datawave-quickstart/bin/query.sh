@@ -212,6 +212,12 @@ function configureQuery() {
          --use-execute | -E)
             DW_QUERY_CREATE_MODE="execute"
             ;;
+         --full)
+            # Get the next page and bail out
+            DW_QUERY_ID="${2}"
+            getFull
+            return 2
+            ;;
          --next | -n)
             # Get the next page and bail out
             DW_QUERY_ID="${2}"
@@ -355,6 +361,43 @@ function closeQuery() {
        info "Query ${DW_QUERY_ID} closed"
        echo
    else
+       prettyPrintResponse
+   fi
+
+   printCurlSummary
+}
+
+
+function getFull() {
+
+   [ -z "${DW_QUERY_ID}" ] && error "DW_QUERY_ID is null. Can't retrieve results" && return 1
+   [ -z "$( echo ${DW_QUERY_ID} | grep -E '^[a-zA-Z0-9\-]+$' )" ] && error "'${DW_QUERY_ID}' is not a valid query id" && return 1
+
+   local curlcmd="/usr/bin/curl \
+   --silent --write-out 'HTTP_STATUS_CODE:%{http_code};TOTAL_TIME:%{time_total};CONTENT_TYPE:%{content_type}' \
+   --insecure --header 'Accept: application/json' ${DW_REQUEST_HEADERS} --cert "${DW_CURL_CERT}" --key "${DW_CURL_KEY_RSA}" --cacert "${DW_CURL_CA}" \
+   -X GET ${DW_QUERY_URI}/${DW_QUERY_ID}/full"
+
+   local response="$( eval "${curlcmd}" )"
+   local exitStatus=$?
+
+   if [ "${exitStatus}" != "0" ] ; then
+       error "Curl command exited with non-zero status: ${exitStatus}"
+       echo
+       return 1
+   fi
+
+   parseQueryResponse
+
+   if [ "${DW_QUERY_RESPONSE_CODE}" == 204 ] ; then
+       echo
+       info "End of result set, as indicated by response code '204'. Query will be closed automatically"
+       echo
+       printCurlSummary && closeQuery
+       return 0
+   fi
+
+   if [ -n "${DW_QUERY_RESPONSE_BODY}" ] ; then
        prettyPrintResponse
    fi
 

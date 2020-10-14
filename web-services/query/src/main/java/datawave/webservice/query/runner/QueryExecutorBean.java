@@ -1891,6 +1891,52 @@ public class QueryExecutorBean implements QueryExecutor {
         return this.next(id, true);
     }
     
+    @GET
+    @Path("/{id}/full")
+    @Produces({"application/xml", "text/xml", "application/json", "text/yaml", "text/x-yaml", "application/x-yaml", "application/x-protobuf",
+            "application/x-protostuff"})
+    @GZIP
+    @EnrichQueryMetrics(methodType = MethodType.NEXT)
+    @Interceptors({ResponseInterceptor.class, RequiredInterceptor.class})
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    @Override
+    @Timed(name = "dw.query.full", absolute = true)
+    public BaseQueryResponse full(@Required("id") @PathParam("id") String id) {
+        
+        BaseQueryResponse response = responseObjectFactory.getEventQueryResponse();
+        ResultsPage finalResultsPage;
+        List<Object> finalResultsList = new ArrayList<>();
+        ResultsPage resultsPageIterator;
+        try {
+            RunningQuery query = queryCache.get(id);
+            
+            if (null == query) {
+                response.setHasResults(false);
+                response.setQueryId(id);
+                response.setLogicName(query.getLogic().getLogicName());
+                response.setPageNumber(1);
+                response.setPartialResults(false);
+            }
+            
+            resultsPageIterator = query.next();
+            while (!resultsPageIterator.getResults().isEmpty()) {
+                finalResultsList.addAll(resultsPageIterator.getResults());
+                resultsPageIterator = query.next();
+            }
+            finalResultsPage = resultsPageIterator;
+            finalResultsPage.getResults().clear();
+            finalResultsPage.setResults(finalResultsList);
+            finalResultsPage.setStatus(ResultsPage.Status.COMPLETE);
+            response = query.getLogic().getTransformer(query.getSettings()).createResponse(finalResultsPage);
+            response.setPageNumber(1);
+            response.setPartialResults(false);
+            response.setHasResults(true);
+        } catch (Exception e) {
+            log.error("Error collecting query pages", e);
+        }
+        return response;
+    }
+    
     private BaseQueryResponse next(final String id, boolean checkForContentLookup) {
         // in case we don't make it to creating the response from the QueryLogic
         BaseQueryResponse response = responseObjectFactory.getEventQueryResponse();

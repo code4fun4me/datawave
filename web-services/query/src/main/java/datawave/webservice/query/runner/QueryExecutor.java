@@ -169,6 +169,14 @@ public interface QueryExecutor {
     BaseQueryResponse next(String id);
     
     /**
+     * Gets the next page of results from the query object. If the object is no longer alive, meaning that the current session has expired, then this will fail.
+     *
+     * @param id
+     * @return set of Row objects
+     */
+    BaseQueryResponse full(String id);
+    
+    /**
      * Locates queries for the current user by name.
      *
      * @param name
